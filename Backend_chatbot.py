@@ -1,13 +1,18 @@
 import os
+import sqlite3
 from dotenv import load_dotenv
 from typing import TypedDict, Annotated
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 load_dotenv()
+
+conn = sqlite3.connect("chatbot.db", check_same_thread=False)
+checkpointer = SqliteSaver(conn=conn)
+checkpointer.setup() 
 
 llm = ChatOpenAI(
     model=os.getenv("OPENROUTER_MODEL"),
@@ -34,7 +39,14 @@ graph.add_node("chat_node", chat_node)
 graph.add_edge(START, "chat_node")
 graph.add_edge("chat_node", END)
 
-workflow = graph.compile(checkpointer=MemorySaver())
+workflow = graph.compile(checkpointer=checkpointer)
+
+def get_all_threads():
+    rows = conn.execute(
+        "SELECT thread_id FROM checkpoints "
+        "GROUP BY thread_id ORDER BY MAX(checkpoint_id) DESC"
+    ).fetchall()
+    return [r[0] for r in rows]
 
 
 if __name__ == "__main__":

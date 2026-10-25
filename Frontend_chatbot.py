@@ -1,7 +1,7 @@
 import uuid
 import streamlit as st
 from langchain_core.messages import HumanMessage
-from Backend_chatbot import workflow
+from Backend_chatbot import workflow, checkpointer, get_all_threads
 
 st.set_page_config(page_title="My Chatbot", page_icon="💬")
 st.title("My Chatbot")
@@ -23,20 +23,16 @@ def switch_chat(thread_id):
 
 
 def delete_chat(thread_id):
-    threads = st.session_state.threads
-    if thread_id in threads:
-        threads.remove(thread_id)
-        workflow.checkpointer.delete_thread(thread_id)  # wipe saved history
-
-    if thread_id == st.session_state.thread_id:  # deleted the open chat
-        if threads:
-            switch_chat(threads[-1])
+    checkpointer.delete_thread(thread_id)
+    if thread_id == st.session_state.thread_id:
+        remaining = get_all_threads()
+        if remaining:
+            switch_chat(remaining[0])
         else:
             new_chat()
 
 
-if "threads" not in st.session_state:
-    st.session_state.threads = []
+
 if "thread_id" not in st.session_state:
     new_chat()
 
@@ -48,7 +44,7 @@ with st.sidebar:
 
     st.divider()
     st.caption("Previous chats")
-    for tid in reversed(st.session_state.threads):
+    for tid in get_all_threads():
         col_open, col_del = st.columns([4, 1])
         label = ("▶ " if tid == st.session_state.thread_id else "") + tid[:8]
         col_open.button(label, key=f"open_{tid}", on_click=switch_chat, args=(tid,), use_container_width=True)
@@ -59,9 +55,7 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 if prompt := st.chat_input("Type your message..."):
-    # Register the thread in the sidebar on its first message
-    if st.session_state.thread_id not in st.session_state.threads:
-        st.session_state.threads.append(st.session_state.thread_id)
+
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
